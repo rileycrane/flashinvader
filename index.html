@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Invaders Flash Stream</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Space Invaders Flash Stream</h1>
+            <div class="controls">
+                <button id="soundToggle" class="control-btn">
+                    <span class="sound-on">🔊</span>
+                    <span class="sound-off" style="display: none;">🔇</span>
+                </button>
+                <div class="stats">
+                    <span id="flashCount">Loading...</span>
+                    <span id="playerCount">Loading...</span>
+                </div>
+            </div>
+        </header>
+        <div id="flashContainer" class="flash-container"></div>
+    </div>
+    
+    <!-- Audio element for the invader shoot sound -->
+    <audio id="shootSound" preload="auto">
+        <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmFgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" src="shoot.wav" type="audio/wav">
+    </audio>
+    
+    <script src="app.js"></script>
+</body>
+</html>
