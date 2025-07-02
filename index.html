@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Space Invaders Flash Stream</title>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 </head>
 <body>
     <div class="container">
@@ -15,12 +16,34 @@
                     <span class="sound-on">🔊</span>
                     <span class="sound-off" style="display: none;">🔇</span>
                 </button>
+                <button id="mapToggle" class="control-btn" title="Toggle Map View">
+                    🗺️
+                </button>
                 <div class="stats">
                     <span id="flashCount">Loading...</span>
                     <span id="playerCount">Loading...</span>
                 </div>
             </div>
         </header>
+        
+        <div class="filters-section">
+            <div class="filter-group">
+                <label for="cityFilter">Filter by City:</label>
+                <select id="cityFilter" class="filter-select">
+                    <option value="">All Cities</option>
+                </select>
+            </div>
+            
+            <div class="leaderboard">
+                <h3>Top Players</h3>
+                <div id="leaderboardList" class="leaderboard-list"></div>
+            </div>
+        </div>
+        
+        <div id="mapView" class="map-view" style="display: none;">
+            <div id="map" class="map-container"></div>
+        </div>
+        
         <div id="flashContainer" class="flash-container"></div>
     </div>
     
@@ -29,6 +52,7 @@
         <source src="data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmFgU7k9n1unEiBC13yO/eizEIHWq+8+OWT" src="shoot.wav" type="audio/wav">
     </audio>
     
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
