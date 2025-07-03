@@ -1,0 +1,2 @@
+# Python dependencies for Space Invaders Flash Stream
+# No external dependencies needed - using only Python standard library

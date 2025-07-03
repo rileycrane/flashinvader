@@ -141,5 +141,13 @@ def run_server(port=8080):
 
 if __name__ == '__main__':
     import sys
-    port = int(sys.argv[1]) if len(sys.argv) > 1 else 8080
+    import os
+    
+    # Use Railway's PORT environment variable or default to 8080
+    port = int(os.environ.get('PORT', 8080))
+    
+    # Allow command line override
+    if len(sys.argv) > 1:
+        port = int(sys.argv[1])
+    
     run_server(port)
