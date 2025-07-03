@@ -1,10 +1,24 @@
 class SpaceInvadersFlashApp {
     constructor() {
-        this.apiUrl = 'https://api.space-invaders.com/flashinvaders/flashes/';
+        // Check if we're running locally with proxy server
+        this.isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        
+        if (this.isLocal) {
+            // Use local proxy endpoints
+            this.apiUrl = '/api/primary';
+            this.fallbackUrl = '/api/fallback';
+        } else {
+            // Use direct endpoints (for production deployment)
+            this.apiUrl = 'https://api.space-invaders.com/flashinvaders/flashes/';
+            this.fallbackUrl = 'https://www.space-invaders.com/flashinvaders/';
+        }
+        
         this.baseImageUrl = 'https://api.space-invaders.com';
         this.flashContainer = document.getElementById('flashContainer');
         this.flashCountElement = document.getElementById('flashCount');
         this.playerCountElement = document.getElementById('playerCount');
+        this.bufferStatusElement = document.getElementById('bufferStatus');
+        this.endpointStatusElement = document.getElementById('endpointStatus');
         this.soundToggle = document.getElementById('soundToggle');
         this.mapToggle = document.getElementById('mapToggle');
         this.cityFilter = document.getElementById('cityFilter');
@@ -29,6 +43,14 @@ class SpaceInvadersFlashApp {
         this.currentFlashCount = 0;
         this.currentPlayerCount = 0;
         
+        // Replay buffer system to reduce API calls
+        this.replayBuffer = [];
+        this.lastFetchTime = 0;
+        this.fetchInterval = 60000; // 1 minute between API calls
+        this.replayInterval = 2000; // 2 seconds between replaying buffered flashes
+        this.isReplaying = false;
+        this.usingFallback = false; // Track which endpoint we're using
+        
         this.init();
     }
     
@@ -51,8 +73,11 @@ class SpaceInvadersFlashApp {
         // Start fetching data
         this.fetchFlashes();
         
-        // Set up periodic updates
-        setInterval(() => this.fetchFlashes(), 5000);
+        // Set up periodic API fetches (much less frequent)
+        setInterval(() => this.fetchFlashes(), this.fetchInterval);
+        
+        // Set up replay system for smooth updates (check every 500ms for precise timing)
+        setInterval(() => this.processReplayBuffer(), 500);
     }
     
     initializeCityCoordinates() {
@@ -224,18 +249,192 @@ class SpaceInvadersFlashApp {
     
     async fetchFlashes() {
         try {
-            const response = await fetch(this.apiUrl);
-            const data = await response.json();
+            // Add some randomization to avoid predictable patterns
+            const jitter = Math.random() * 5000; // 0-5 second random delay
             
-            // Update stats with animation
-            this.updateStats(data.flash_count, data.player_count);
+            let data = null;
+            let source = 'primary';
             
-            // Process flashes
-            if (data.with_paris && Array.isArray(data.with_paris)) {
-                this.processFlashes(data.with_paris);
+            // Try primary API first
+            try {
+                console.log(`🌐 Trying primary API... (next fetch in ~${Math.round((this.fetchInterval + jitter) / 1000)}s)`);
+                data = await this.fetchFromPrimaryAPI();
+                
+                // If we were using fallback before, log that we're back to primary
+                if (this.usingFallback) {
+                    console.log('✅ Primary API restored, switching back from fallback');
+                    this.usingFallback = false;
+                    this.updateStatusMessage('✅ Primary API restored');
+                    this.updateEndpointStatus('Primary');
+                    setTimeout(() => this.updateStatusMessage(''), 3000);
+                } else {
+                    this.updateEndpointStatus('Primary');
+                }
+                
+            } catch (primaryError) {
+                console.warn('⚠️ Primary API failed:', primaryError.message);
+                
+                // Try fallback endpoint
+                try {
+                    console.log('🔄 Trying fallback endpoint...');
+                    data = await this.fetchFromFallbackHTML();
+                    source = 'fallback';
+                    
+                    if (!this.usingFallback) {
+                        console.log('🔄 Switched to fallback endpoint');
+                        this.usingFallback = true;
+                        this.updateStatusMessage('🔄 Using fallback endpoint');
+                        this.updateEndpointStatus('Fallback');
+                    }
+                    
+                } catch (fallbackError) {
+                    console.error('❌ Both endpoints failed:', fallbackError.message);
+                    this.updateStatusMessage('❌ All endpoints failed - retrying...');
+                    return;
+                }
             }
+            
+            if (data) {
+                console.log(`📊 Data received from ${source} endpoint`);
+                
+                // Update stats with animation
+                this.updateStats(data.flash_count, data.player_count);
+                
+                // Process flashes
+                if (data.with_paris && Array.isArray(data.with_paris)) {
+                    this.processFlashes(data.with_paris);
+                }
+                
+                // Reset fetch interval if we were rate limited before
+                if (this.fetchInterval > 60000) {
+                    console.log('✅ API access restored, returning to normal interval');
+                    this.fetchInterval = 60000;
+                }
+            }
+            
         } catch (error) {
-            console.error('Error fetching flashes:', error);
+            console.error('❌ Unexpected error in fetchFlashes:', error);
+            this.updateStatusMessage('❌ Unexpected error - retrying...');
+        }
+    }
+    
+    async fetchFromPrimaryAPI() {
+        const headers = this.isLocal ? {} : {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        };
+        
+        const response = await fetch(this.apiUrl, { headers });
+        
+        if (!response.ok) {
+            if (response.status === 403) {
+                console.error('🚫 IP banned (403). Increasing fetch interval to 5 minutes.');
+                this.fetchInterval = 300000; // 5 minutes
+                throw new Error(`Primary API blocked (403) - IP banned`);
+            } else if (response.status === 429) {
+                console.error('🚫 Too many requests (429). Increasing fetch interval to 2 minutes.');
+                this.fetchInterval = 120000; // 2 minutes
+                throw new Error(`Primary API rate limited (429)`);
+            }
+            throw new Error(`Primary API HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        return await response.json();
+    }
+    
+    async fetchFromFallbackHTML() {
+        const headers = this.isLocal ? {} : {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache'
+        };
+        
+        const response = await fetch(this.fallbackUrl, { headers });
+        
+        if (!response.ok) {
+            throw new Error(`Fallback HTTP ${response.status}: ${response.statusText}`);
+        }
+        
+        if (this.isLocal) {
+            // Proxy server returns JSON directly
+            return await response.json();
+        } else {
+            // Direct HTML access - need to parse
+            const htmlText = await response.text();
+            
+            // Extract JSON from the HTML
+            const jsonMatch = htmlText.match(/var flashData = JSON\.parse\('(.+?)'\);/);
+            if (!jsonMatch) {
+                throw new Error('Could not find flashData in HTML');
+            }
+            
+            // Decode the JSON string (it's escaped in the HTML)
+            let jsonString = jsonMatch[1];
+            
+            // Unescape the JSON string
+            jsonString = jsonString
+                .replace(/\\u0022/g, '"')
+                .replace(/\\u002F/g, '/')
+                .replace(/\\u003C/g, '<')
+                .replace(/\\u003E/g, '>')
+                .replace(/\\u0026/g, '&')
+                .replace(/\\u0027/g, "'")
+                .replace(/\\u003D/g, '=')
+                .replace(/\\u003A/g, ':')
+                .replace(/\\u002C/g, ',')
+                .replace(/\\u007B/g, '{')
+                .replace(/\\u007D/g, '}')
+                .replace(/\\u005B/g, '[')
+                .replace(/\\u005D/g, ']');
+            
+            try {
+                const data = JSON.parse(jsonString);
+                console.log('✅ Successfully parsed JSON from fallback HTML');
+                return data;
+            } catch (parseError) {
+                console.error('❌ Failed to parse JSON from fallback HTML:', parseError);
+                throw new Error('Failed to parse JSON from fallback HTML');
+            }
+        }
+    }
+    
+    updateStatusMessage(message) {
+        // Add status message to the header if it doesn't exist
+        let statusElement = document.getElementById('statusMessage');
+        if (!statusElement) {
+            statusElement = document.createElement('div');
+            statusElement.id = 'statusMessage';
+            statusElement.style.cssText = `
+                position: fixed;
+                top: 80px;
+                right: 10px;
+                background: rgba(0, 255, 0, 0.1);
+                border: 1px solid #0f0;
+                color: #0f0;
+                padding: 8px 12px;
+                border-radius: 5px;
+                font-family: 'Courier New', monospace;
+                font-size: 0.85em;
+                z-index: 1000;
+                transition: opacity 0.3s;
+                max-width: 200px;
+                text-align: center;
+            `;
+            document.body.appendChild(statusElement);
+        }
+        
+        if (message) {
+            statusElement.textContent = message;
+            statusElement.style.opacity = '1';
+        } else {
+            statusElement.style.opacity = '0';
         }
     }
     
@@ -265,13 +464,11 @@ class SpaceInvadersFlashApp {
         // Check if this is the first load
         const isFirstLoad = this.allFlashes.length === 0;
         
-        // Process new flashes first (before updating allFlashes)
+        // Find new flashes that we haven't seen before
         const newFlashes = flashes.filter(flash => !this.seenFlashes.has(flash.flash_id));
         
-        // Update all flashes array
+        // Update all flashes array and stats
         this.allFlashes = [...flashes];
-        
-        // Update cities and player stats
         this.updateCitiesAndStats(flashes);
         
         if (isFirstLoad) {
@@ -279,39 +476,110 @@ class SpaceInvadersFlashApp {
             flashes.forEach(flash => this.seenFlashes.add(flash.flash_id));
             this.updateCityFilter();
             this.updateLeaderboard();
-        } else {
-            // Play sound once for the batch of new flashes (if any)
-            if (newFlashes.length > 0) {
-                this.playShootSound();
-            }
+            console.log(`🚀 Initial load: ${flashes.length} flashes loaded`);
+        } else if (newFlashes.length > 0) {
+            // Add new flashes to replay buffer instead of showing immediately
+            console.log(`📦 Buffering ${newFlashes.length} new flashes for replay`);
             
-            // Only add truly new flashes with animation
+            // Sort new flashes by timestamp (oldest first for proper replay order)
+            newFlashes.sort((a, b) => a.timestamp - b.timestamp);
+            
+            // Calculate proper replay timing based on actual timestamps
+            const currentTime = Date.now();
+            const baseReplayTime = currentTime + 1000; // Start replaying in 1 second
+            
+            // Find the time span of the new flashes
+            const firstTimestamp = newFlashes[0].timestamp;
+            const lastTimestamp = newFlashes[newFlashes.length - 1].timestamp;
+            const timeSpan = lastTimestamp - firstTimestamp;
+            
+            console.log(`⏱️ Flash time span: ${timeSpan} seconds`);
+            
+            // Add to replay buffer with proper timing intervals
             newFlashes.forEach((flash, index) => {
                 this.seenFlashes.add(flash.flash_id);
                 
-                // Add to map if visible
-                if (this.mapVisible) {
-                    setTimeout(() => {
-                        this.addFlashToMap(flash, true);
-                    }, index * 200);
-                }
+                // Calculate the relative position of this flash in the timeline
+                const relativeTime = flash.timestamp - firstTimestamp;
                 
-                // Add to main view with delay - only for new flashes
-                setTimeout(() => {
-                    this.addFlash(flash, true, false); // false = don't play sound
-                }, index * 100);
+                // Use actual timing - no scaling or compression
+                const actualTime = relativeTime * 1000; // Convert seconds to milliseconds
+                
+                this.replayBuffer.push({
+                    flash: flash,
+                    replayTime: baseReplayTime + actualTime,
+                    originalTimestamp: flash.timestamp
+                });
+                
+                console.log(`📅 Flash ${index + 1}: ${flash.player} scheduled for +${Math.round(actualTime/1000)}s (real timing)`);
             });
             
-            // Update filters and leaderboard only if there are no new flashes
-            // This prevents re-rendering existing flashes
-            if (newFlashes.length === 0) {
-                this.updateCityFilterOptions();
-                this.updateLeaderboard();
+            // Update filters without re-rendering
+            this.updateCityFilterOptions();
+            this.updateLeaderboard();
+            
+            console.log(`📊 Replay buffer now has ${this.replayBuffer.length} flashes queued`);
+            this.updateBufferStatus();
+        } else {
+            // No new flashes, just update stats
+            this.updateCityFilterOptions();
+            this.updateLeaderboard();
+            console.log(`✅ No new flashes found`);
+        }
+    }
+    
+    updateBufferStatus() {
+        if (this.bufferStatusElement) {
+            this.bufferStatusElement.textContent = `Buffer: ${this.replayBuffer.length}`;
+        }
+    }
+    
+    updateEndpointStatus(endpoint) {
+        if (this.endpointStatusElement) {
+            this.endpointStatusElement.textContent = `API: ${endpoint}`;
+            // Add visual indicator for fallback
+            if (endpoint === 'Fallback') {
+                this.endpointStatusElement.style.color = '#ff6600';
             } else {
-                // If there are new flashes, update filters without re-rendering
-                this.updateCityFilterOptions();
-                this.updateLeaderboard();
+                this.endpointStatusElement.style.color = '#0f0';
             }
+        }
+    }
+    
+    processReplayBuffer() {
+        if (this.replayBuffer.length === 0) return;
+        
+        const currentTime = Date.now();
+        const flashesToReplay = [];
+        
+        // Find flashes that are ready to be replayed
+        this.replayBuffer = this.replayBuffer.filter(item => {
+            if (item.replayTime <= currentTime) {
+                flashesToReplay.push(item);
+                return false; // Remove from buffer
+            }
+            return true; // Keep in buffer
+        });
+        
+        // Replay each flash individually (no batching for sound)
+        flashesToReplay.forEach((item, index) => {
+            console.log(`🎬 Replaying flash: ${item.flash.player} from ${item.flash.city}`);
+            
+            // Play sound for each flash (authentic timing)
+            this.playShootSound();
+            
+            // Add to map if visible
+            if (this.mapVisible) {
+                this.addFlashToMap(item.flash, true);
+            }
+            
+            // Add to main view immediately (no additional delay)
+            this.addFlash(item.flash, true, false); // false = don't play sound (already played)
+        });
+        
+        // Update buffer status if any flashes were processed
+        if (flashesToReplay.length > 0) {
+            this.updateBufferStatus();
         }
     }
     
