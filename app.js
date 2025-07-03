@@ -1,19 +1,27 @@
 class SpaceInvadersFlashApp {
     constructor() {
-        // Check if we're running locally with proxy server
-        this.isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        // Check if we're running locally or on Railway with our proxy server
+        this.isLocal = window.location.hostname === 'localhost' || 
+                      window.location.hostname === '127.0.0.1' ||
+                      window.location.hostname.includes('railway.app'); // Add Railway detection
         
         if (this.isLocal) {
-            // Use local proxy endpoints
+            // Use local proxy endpoints (works for both localhost and Railway)
             this.apiUrl = '/api/primary';
             this.fallbackUrl = '/api/fallback';
         } else {
-            // Use direct endpoints (for production deployment)
+            // Use direct endpoints (for other production deployments)
             this.apiUrl = 'https://api.space-invaders.com/flashinvaders/flashes/';
             this.fallbackUrl = 'https://www.space-invaders.com/flashinvaders/';
         }
         
         this.baseImageUrl = 'https://api.space-invaders.com';
+        
+        // Debug logging for deployment
+        console.log(`🔍 Hostname: ${window.location.hostname}`);
+        console.log(`🔍 Using proxy: ${this.isLocal}`);
+        console.log(`🔍 API URL: ${this.apiUrl}`);
+        console.log(`🔍 Fallback URL: ${this.fallbackUrl}`);
         this.flashContainer = document.getElementById('flashContainer');
         this.flashCountElement = document.getElementById('flashCount');
         this.playerCountElement = document.getElementById('playerCount');
