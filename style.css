@@ -87,15 +87,63 @@ h1 {
 
 /* Filters Section */
 .filters-section {
+    margin: 20px 0;
+    border: 1px solid #0f0;
+    border-radius: 10px;
+    background-color: rgba(0, 255, 0, 0.05);
+    overflow: hidden;
+}
+
+.filters-header {
+    padding: 0;
+}
+
+.filters-toggle {
+    width: 100%;
+    background: none;
+    border: none;
+    color: #0f0;
+    padding: 15px 20px;
+    font-family: 'Courier New', monospace;
+    font-size: 1.1em;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: all 0.3s;
+}
+
+.filters-toggle:hover {
+    background-color: rgba(0, 255, 0, 0.1);
+}
+
+.toggle-arrow {
+    transition: transform 0.3s;
+    font-size: 0.8em;
+}
+
+.filters-toggle.collapsed .toggle-arrow {
+    transform: rotate(-90deg);
+}
+
+.filters-content {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
     gap: 30px;
-    margin: 20px 0;
     padding: 20px;
-    background-color: rgba(0, 255, 0, 0.05);
-    border: 1px solid #0f0;
-    border-radius: 10px;
+    border-top: 1px solid rgba(0, 255, 0, 0.3);
+    max-height: 300px;
+    overflow: hidden;
+    transition: all 0.3s ease;
+}
+
+.filters-content.collapsed {
+    max-height: 0;
+    padding: 0 20px;
+    border-top: none;
 }
 
 .filter-group {
@@ -428,6 +476,11 @@ h1 {
     }
     
     .filters-section {
+        flex-direction: column;
+        gap: 20px;
+    }
+    
+    .filters-content {
         flex-direction: column;
         gap: 20px;
     }

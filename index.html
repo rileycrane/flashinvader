@@ -27,16 +27,25 @@
         </header>
         
         <div class="filters-section">
-            <div class="filter-group">
-                <label for="cityFilter">Filter by City:</label>
-                <select id="cityFilter" class="filter-select">
-                    <option value="">All Cities</option>
-                </select>
+            <div class="filters-header">
+                <button id="filtersToggle" class="filters-toggle">
+                    <span class="toggle-text">Filters & Leaderboard</span>
+                    <span class="toggle-arrow">▼</span>
+                </button>
             </div>
             
-            <div class="leaderboard">
-                <h3>Top Players</h3>
-                <div id="leaderboardList" class="leaderboard-list"></div>
+            <div id="filtersContent" class="filters-content">
+                <div class="filter-group">
+                    <label for="cityFilter">Filter by City:</label>
+                    <select id="cityFilter" class="filter-select">
+                        <option value="">All Cities</option>
+                    </select>
+                </div>
+                
+                <div class="leaderboard">
+                    <h3>Top Players</h3>
+                    <div id="leaderboardList" class="leaderboard-list"></div>
+                </div>
             </div>
         </div>
         

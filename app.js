@@ -10,10 +10,13 @@ class SpaceInvadersFlashApp {
         this.cityFilter = document.getElementById('cityFilter');
         this.leaderboardList = document.getElementById('leaderboardList');
         this.mapView = document.getElementById('mapView');
+        this.filtersToggle = document.getElementById('filtersToggle');
+        this.filtersContent = document.getElementById('filtersContent');
         this.shootSound = document.getElementById('shootSound');
         
         this.soundEnabled = true;
         this.mapVisible = false;
+        this.filtersCollapsed = true; // Start collapsed by default
         this.seenFlashes = new Set();
         this.maxFlashes = 50;
         this.allFlashes = [];
@@ -34,9 +37,13 @@ class SpaceInvadersFlashApp {
         this.soundToggle.addEventListener('click', () => this.toggleSound());
         this.mapToggle.addEventListener('click', () => this.toggleMap());
         this.cityFilter.addEventListener('change', () => this.applyFilters());
+        this.filtersToggle.addEventListener('click', () => this.toggleFilters());
         
         // Initialize city coordinates (you can expand this list)
         this.initializeCityCoordinates();
+        
+        // Initialize filters as collapsed
+        this.initializeFiltersState();
         
         // Create a simple shoot sound using Web Audio API as fallback
         this.createShootSound();
@@ -61,6 +68,13 @@ class SpaceInvadersFlashApp {
         this.cityCoordinates.set('Bordeaux', [44.8378, -0.5792]);
         this.cityCoordinates.set('Lille', [50.6292, 3.0573]);
         // Add more cities as needed
+    }
+    
+    initializeFiltersState() {
+        if (this.filtersCollapsed) {
+            this.filtersContent.classList.add('collapsed');
+            this.filtersToggle.classList.add('collapsed');
+        }
     }
     
     createShootSound() {
@@ -102,6 +116,18 @@ class SpaceInvadersFlashApp {
         } else {
             soundOn.style.display = 'none';
             soundOff.style.display = 'inline';
+        }
+    }
+    
+    toggleFilters() {
+        this.filtersCollapsed = !this.filtersCollapsed;
+        
+        if (this.filtersCollapsed) {
+            this.filtersContent.classList.add('collapsed');
+            this.filtersToggle.classList.add('collapsed');
+        } else {
+            this.filtersContent.classList.remove('collapsed');
+            this.filtersToggle.classList.remove('collapsed');
         }
     }
     
@@ -236,35 +262,57 @@ class SpaceInvadersFlashApp {
     }
     
     processFlashes(flashes) {
+        // Check if this is the first load
+        const isFirstLoad = this.allFlashes.length === 0;
+        
+        // Process new flashes first (before updating allFlashes)
+        const newFlashes = flashes.filter(flash => !this.seenFlashes.has(flash.flash_id));
+        
         // Update all flashes array
         this.allFlashes = [...flashes];
         
         // Update cities and player stats
         this.updateCitiesAndStats(flashes);
         
-        // Process new flashes
-        const newFlashes = flashes.filter(flash => !this.seenFlashes.has(flash.flash_id));
-        
-        newFlashes.forEach((flash, index) => {
-            this.seenFlashes.add(flash.flash_id);
-            
-            // Add to map if visible
-            if (this.mapVisible) {
-                setTimeout(() => {
-                    this.addFlashToMap(flash, true);
-                }, index * 200);
+        if (isFirstLoad) {
+            // On first load, mark all as seen and display without animation
+            flashes.forEach(flash => this.seenFlashes.add(flash.flash_id));
+            this.updateCityFilter();
+            this.updateLeaderboard();
+        } else {
+            // Play sound once for the batch of new flashes (if any)
+            if (newFlashes.length > 0) {
+                this.playShootSound();
             }
             
-            // Add to main view with delay
-            setTimeout(() => {
-                this.addFlash(flash, true);
-            }, index * 100);
-        });
-        
-        // Update filters and leaderboard
-        this.updateCityFilter();
-        this.updateLeaderboard();
-        this.applyFilters();
+            // Only add truly new flashes with animation
+            newFlashes.forEach((flash, index) => {
+                this.seenFlashes.add(flash.flash_id);
+                
+                // Add to map if visible
+                if (this.mapVisible) {
+                    setTimeout(() => {
+                        this.addFlashToMap(flash, true);
+                    }, index * 200);
+                }
+                
+                // Add to main view with delay - only for new flashes
+                setTimeout(() => {
+                    this.addFlash(flash, true, false); // false = don't play sound
+                }, index * 100);
+            });
+            
+            // Update filters and leaderboard only if there are no new flashes
+            // This prevents re-rendering existing flashes
+            if (newFlashes.length === 0) {
+                this.updateCityFilterOptions();
+                this.updateLeaderboard();
+            } else {
+                // If there are new flashes, update filters without re-rendering
+                this.updateCityFilterOptions();
+                this.updateLeaderboard();
+            }
+        }
     }
     
     updateCitiesAndStats(flashes) {
@@ -282,6 +330,11 @@ class SpaceInvadersFlashApp {
     }
     
     updateCityFilter() {
+        this.updateCityFilterOptions();
+        this.applyFilters();
+    }
+    
+    updateCityFilterOptions() {
         const currentValue = this.cityFilter.value;
         
         // Clear existing options except "All Cities"
@@ -346,6 +399,9 @@ class SpaceInvadersFlashApp {
             return cityMatch && playerMatch;
         });
         
+        // Sort by timestamp (newest first) - this fixes the ordering issue
+        this.filteredFlashes.sort((a, b) => b.timestamp - a.timestamp);
+        
         // Clear and repopulate flash container
         this.flashContainer.innerHTML = '';
         
@@ -354,15 +410,24 @@ class SpaceInvadersFlashApp {
         });
     }
     
-    addFlash(flash, isNew = false) {
+    addFlash(flash, isNew = false, playSound = true) {
         const flashElement = this.createFlashElement(flash);
         
-        // Insert at the beginning of the container
-        this.flashContainer.insertBefore(flashElement, this.flashContainer.firstChild);
-        
         if (isNew) {
+            // Insert at the very beginning for new flashes (top-left)
+            this.flashContainer.insertBefore(flashElement, this.flashContainer.firstChild);
             flashElement.classList.add('new');
-            this.playShootSound();
+            
+            // Only play sound if explicitly requested (to avoid multiple sounds)
+            if (playSound) {
+                this.playShootSound();
+            }
+            
+            // Clean up old flashes if we exceed the maximum
+            this.cleanupOldFlashes();
+        } else {
+            // For filtered/existing flashes, append normally
+            this.flashContainer.appendChild(flashElement);
         }
         
         // Force reflow to ensure animation plays
